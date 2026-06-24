@@ -63,13 +63,16 @@ def _resolve() -> tuple[str | None, str, bool]:
     """Resolve effective (api_key, base_url, use_mock).
 
     Runtime config (set via the web UI, stored in SQLite) takes precedence over
-    environment variables.
+    environment variables. Mock resolution mirrors the LLM's: a configured API
+    key (web or env) overrides the global ``USE_MOCK`` flag, so the web config is
+    never silently ignored. Mock is used only when explicitly forced, or when no
+    key is available and the global demo flag is on.
     """
     settings = get_settings()
     cfg = get_price_config()
     api_key = cfg.api_key or settings.metalprice_api_key or settings.metals_api_key
     base_url = (cfg.base_url or API_BASE).rstrip("/")
-    use_mock = settings.use_mock or cfg.use_mock
+    use_mock = cfg.use_mock or (not api_key and settings.use_mock)
     return api_key, base_url, use_mock
 
 
