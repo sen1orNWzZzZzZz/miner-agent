@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mining-news-mcp": {
+      "url": "http://localhost:8000/sse"
+    },
+    "mineral-pdf-mcp": {
+      "url": "http://localhost:8001/sse"
+    },
+    "lme-price-mcp": {
+      "url": "http://localhost:8002/sse"
+    }
+  }
+}

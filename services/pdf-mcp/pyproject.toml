@@ -1,0 +1,23 @@
+[project]
+name = "pdf-mcp"
+version = "0.1.0"
+description = "NI 43-101 mineral resource PDF parser MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.6.0",
+    "httpx>=0.27",
+    "pymupdf>=1.24",
+    "pdfplumber>=0.11",
+    "uvicorn>=0.30",
+    "shared",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdf_mcp"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

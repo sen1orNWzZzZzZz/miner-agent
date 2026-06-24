@@ -1,0 +1,12 @@
+[project]
+name = "miner"
+version = "0.1.0"
+description = "矿权日报 Agent — MCP servers + LangGraph client"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+[tool.uv.sources]
+shared = { workspace = true }

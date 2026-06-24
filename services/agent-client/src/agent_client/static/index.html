@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>矿权日报 Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css?v=6" />
+  <script>
+    window.onerror = function (msg, url, line) {
+      console.error("[页面 JS 错误]", msg, "URL:", url, "Line:", line);
+    };
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="max-w-7xl mx-auto p-4 md:p-6">
+    <header class="mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold text-slate-900">矿权日报 Agent</h1>
+        <p class="text-slate-500 mt-1">基于 MCP + LangGraph 的矿业资产每日简报生成器</p>
+      </div>
+      <button id="open-config" type="button" class="btn-secondary flex items-center gap-2">
+        <span>⚙️</span> 模型配置
+      </button>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <!-- File delivery sidebar -->
+      <aside class="lg:col-span-1 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <h2 class="font-semibold text-lg mb-4 flex items-center gap-2">
+            <span>📄</span> 文件交付
+          </h2>
+          <div class="space-y-3">
+            <div>
+              <label for="pdf-file" class="block text-sm font-medium mb-1">上传 PDF 储量报告</label>
+              <input id="pdf-file" type="file" accept="application/pdf" class="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+              <p class="text-xs text-slate-500 mt-1">仅支持 PDF 格式，推荐上传 NI 43-101 技术报告。</p>
+            </div>
+            <button id="upload-pdf" class="btn-primary w-full">解析储量</button>
+            <a id="download-briefing" href="/api/download/briefing" class="btn-secondary w-full inline-block text-center" download>下载最新简报</a>
+            <div id="pdf-status" class="text-sm hidden"></div>
+            <div id="pdf-result" class="text-sm bg-slate-50 rounded-lg p-3 border border-slate-200 hidden"></div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Chat -->
+      <main class="lg:col-span-3 space-y-6">
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[72vh]">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+            <h2 class="font-semibold text-lg">💬 对话生成简报</h2>
+            <span id="mode-badge" class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">加载中…</span>
+          </div>
+
+          <div id="chat-history" class="flex-1 overflow-y-auto p-4 space-y-4">
+            <div class="bot-message">
+              <p>你好！我是矿权日报 Agent。请在下方输入指令，例如：</p>
+              <p class="text-slate-500 mt-1">“给我生成一份关于 Pilbara 锂矿的今日简报”</p>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+            <div id="attachment-list" class="flex flex-wrap gap-2 mb-2"></div>
+            <div class="flex gap-2">
+              <label for="attach-file" class="btn-secondary px-3 cursor-pointer" title="上传 PDF 附件">📎</label>
+              <input id="attach-file" type="file" accept="application/pdf" class="hidden" />
+              <form id="chat-form" class="flex gap-2 flex-1">
+                <textarea id="query" rows="2" placeholder="输入你的矿业简报需求…" class="w-input flex-1 resize-none"></textarea>
+                <button type="submit" id="send-btn" class="btn-primary px-6">发送</button>
+              </form>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">📎 附件仅支持 PDF 格式；上传后将作为独立记忆点，在后续对话中持续可用，直到你手动移除。</p>
+            <p class="text-xs text-amber-600 mt-1">⚠️ Demo 对话保存在内存中，未做持久化保存，刷新或重启后将丢失。</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- LLM config modal -->
+  <div id="config-modal" class="modal-overlay hidden">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg flex items-center gap-2">
+          <span>⚙️</span> 模型配置
+        </h2>
+        <button id="close-config" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <form id="llm-config-form" class="space-y-4">
+        <div>
+          <label for="provider" class="block text-sm font-medium mb-1">Provider</label>
+          <select id="provider" name="provider" class="w-input">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openai-compatible">OpenAI-compatible</option>
+          </select>
+        </div>
+        <div>
+          <label for="model" class="block text-sm font-medium mb-1">Model</label>
+          <input id="model" name="model" type="text" value="gpt-4o-mini" class="w-input" />
+        </div>
+        <div>
+          <label for="base_url" class="block text-sm font-medium mb-1">Base URL <span class="text-slate-400 text-xs">（可选）</span></label>
+          <input id="base_url" name="base_url" type="text" placeholder="https://api.openai.com/v1" class="w-input" />
+        </div>
+        <div>
+          <label for="api_key" class="block text-sm font-medium mb-1">API Key</label>
+          <input id="api_key" name="api_key" type="password" placeholder="sk-..." class="w-input" />
+        </div>
+        <div class="flex items-center justify-between">
+          <label for="use_mock" class="text-sm font-medium">强制使用 Mock LLM</label>
+          <label class="toggle-switch">
+            <input id="use_mock" name="use_mock" type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="btn-primary flex-1">保存</button>
+          <button type="button" id="test-config" class="btn-secondary flex-1">测试连接</button>
+        </div>
+      </form>
+      <div id="config-status" class="mt-3 text-sm hidden"></div>
+
+      <hr class="my-5 border-slate-200" />
+
+      <h2 class="font-semibold text-lg flex items-center gap-2 mb-4">
+        <span>📈</span> 金属价格 API
+      </h2>
+      <form id="price-config-form" class="space-y-4">
+        <div>
+          <label for="price_provider" class="block text-sm font-medium mb-1">Provider</label>
+          <input id="price_provider" name="price_provider" type="text" value="metalpriceapi" class="w-input" />
+        </div>
+        <div>
+          <label for="price_base_url" class="block text-sm font-medium mb-1">Base URL <span class="text-slate-400 text-xs">（可选）</span></label>
+          <input id="price_base_url" name="price_base_url" type="text" placeholder="https://api.metalpriceapi.com/v1" class="w-input" />
+        </div>
+        <div>
+          <label for="price_api_key" class="block text-sm font-medium mb-1">API Key</label>
+          <input id="price_api_key" name="price_api_key" type="password" placeholder="MetalpriceAPI key" class="w-input" />
+          <p class="text-xs text-slate-500 mt-1">免费 key 见 <a href="https://metalpriceapi.com" target="_blank" class="text-indigo-600 hover:underline">metalpriceapi.com</a>；留空则使用 mock 价格。</p>
+        </div>
+        <div class="flex items-center justify-between">
+          <label for="price_use_mock" class="text-sm font-medium">强制使用 Mock 价格</label>
+          <label class="toggle-switch">
+            <input id="price_use_mock" name="price_use_mock" type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="btn-primary flex-1">保存</button>
+          <button type="button" id="test-price-config" class="btn-secondary flex-1">测试连接</button>
+        </div>
+      </form>
+      <div id="price-config-status" class="mt-3 text-sm hidden"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>

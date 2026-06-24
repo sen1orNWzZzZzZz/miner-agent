@@ -1,0 +1,115 @@
+services:
+  news-mcp:
+    build:
+      context: .
+      dockerfile: services/news-mcp/Dockerfile
+    container_name: miner-news-mcp
+    ports:
+      - "${NEWS_MCP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - NEWS_MCP_PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - USE_MOCK=${USE_MOCK:-true}
+      - CURRENTS_API_KEY=${CURRENTS_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - miner-net
+
+  pdf-mcp:
+    build:
+      context: .
+      dockerfile: services/pdf-mcp/Dockerfile
+    container_name: miner-pdf-mcp
+    ports:
+      - "${PDF_MCP_PORT:-8001}:8001"
+    env_file:
+      - .env
+    environment:
+      - PDF_MCP_PORT=8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - USE_MOCK=${USE_MOCK:-true}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - miner-net
+
+  price-mcp:
+    build:
+      context: .
+      dockerfile: services/price-mcp/Dockerfile
+    container_name: miner-price-mcp
+    ports:
+      - "${PRICE_MCP_PORT:-8002}:8002"
+    env_file:
+      - .env
+    environment:
+      - PRICE_MCP_PORT=8002
+      - PRICE_DATA_DIR=/app/data
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - USE_MOCK=${USE_MOCK:-true}
+      - METALS_API_KEY=${METALS_API_KEY:-}
+      - METALPRICE_API_KEY=${METALPRICE_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - miner-net
+
+  agent-client:
+    build:
+      context: .
+      dockerfile: services/agent-client/Dockerfile
+    container_name: miner-agent-client
+    ports:
+      - "${AGENT_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - AGENT_DATA_DIR=/app/data
+      - AGENT_PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - NEWS_MCP_HOST=news-mcp
+      - PDF_MCP_HOST=pdf-mcp
+      - PRICE_MCP_HOST=price-mcp
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      news-mcp:
+        condition: service_healthy
+      pdf-mcp:
+        condition: service_healthy
+      price-mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - miner-net
+
+networks:
+  miner-net:
+    driver: bridge
